@@ -56,22 +56,44 @@ jobs:
             --output $publish
 
       # =========================================================
-      # 4. Додаємо authlib-injector
+      # 4. Завантажуємо latest authlib-injector
       # =========================================================
-      - name: Add authlib-injector
+      - name: Download latest authlib-injector
         shell: pwsh
         run: |
-          $source = "source\authlib-injector-1.2.7.jar"
-          $destination = "publish\authlib-injector-1.2.7.jar"
+          $api = "https://api.github.com/repos/yushijinhun/authlib-injector/releases/latest"
 
-          if (Test-Path $source) {
-              Copy-Item $source $destination -Force
-              Write-Host "authlib-injector added."
+          Write-Host "Getting latest authlib-injector release..."
+
+          $release = Invoke-RestMethod `
+            -Uri $api `
+            -Headers @{ "User-Agent" = "GitHub-Actions" }
+
+          $asset = $release.assets |
+            Where-Object { $_.name -like "*.jar" } |
+            Select-Object -First 1
+
+          if (!$asset) {
+              throw "No .jar asset found in latest authlib-injector release!"
           }
-          else {
-              Write-Error "authlib-injector-1.2.7.jar was not found!"
-              exit 1
+
+          Write-Host "Latest version: $($release.tag_name)"
+          Write-Host "Downloading: $($asset.name)"
+
+          $destination = Join-Path $env:GITHUB_WORKSPACE "publish\authlib-injector.jar"
+
+          New-Item -ItemType Directory -Force -Path "publish" | Out-Null
+
+          Invoke-WebRequest `
+            -Uri $asset.browser_download_url `
+            -OutFile $destination
+
+          if (!(Test-Path $destination)) {
+              throw "authlib-injector.jar was not downloaded!"
           }
+
+          Write-Host "authlib-injector downloaded successfully."
+          Write-Host "File: $destination"
 
       # =========================================================
       # 5. Перевіряємо EXE

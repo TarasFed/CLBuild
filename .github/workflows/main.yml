@@ -1,0 +1,152 @@
+name: Build CL Launcher
+
+on:
+  workflow_dispatch:
+
+  repository_dispatch:
+    types:
+      - build-launcher
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Windows x64
+    runs-on: windows-latest
+
+    steps:
+      # =========================================================
+      # 1. Checkout CL Launcher з ІНШОГО репозиторію
+      # =========================================================
+      - name: Checkout CL Launcher
+        uses: actions/checkout@v4
+        with:
+          repository: WER-CORE/CL-OpenSource
+          ref: main
+          path: source
+
+      # =========================================================
+      # 2. Setup .NET 8
+      # =========================================================
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+          cache: true
+          cache-dependency-path: source/**/packages.lock.json
+
+      # =========================================================
+      # 3. Publish CL Launcher
+      # =========================================================
+      - name: Publish CL Launcher
+        shell: pwsh
+        working-directory: source
+        run: |
+          $project = "CL(CLegendary Launcher)\CL(CLegendary Launcher).csproj"
+          $publish = Join-Path $env:GITHUB_WORKSPACE "publish"
+
+          if (Test-Path $publish) {
+              Remove-Item $publish -Recurse -Force
+          }
+
+          dotnet publish $project `
+            --configuration Release `
+            --framework net8.0-windows10.0.26100.0 `
+            --runtime win-x64 `
+            --self-contained true `
+            --output $publish
+
+      # =========================================================
+      # 4. Додаємо authlib-injector
+      # =========================================================
+      - name: Add authlib-injector
+        shell: pwsh
+        run: |
+          $source = "source\authlib-injector-1.2.7.jar"
+          $destination = "publish\authlib-injector-1.2.7.jar"
+
+          if (Test-Path $source) {
+              Copy-Item $source $destination -Force
+              Write-Host "authlib-injector added."
+          }
+          else {
+              Write-Error "authlib-injector-1.2.7.jar was not found!"
+              exit 1
+          }
+
+      # =========================================================
+      # 5. Перевіряємо EXE
+      # =========================================================
+      - name: Verify launcher
+        shell: pwsh
+        run: |
+          $exe = "publish\CL(CLegendary Launcher).exe"
+
+          if (!(Test-Path $exe)) {
+              Write-Host "Published files:"
+              Get-ChildItem "publish" -Recurse
+
+              throw "CL(CLegendary Launcher).exe was not found!"
+          }
+
+          Write-Host "Launcher found successfully."
+
+      # =========================================================
+      # 6. Показуємо результат
+      # =========================================================
+      - name: Show publish output
+        shell: pwsh
+        run: |
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "        CL LAUNCHER PUBLISH OUTPUT"
+          Write-Host "=========================================="
+          Write-Host ""
+
+          Get-ChildItem "publish" -File |
+            Sort-Object Name |
+            Select-Object Name, Length
+
+          Write-Host ""
+          Write-Host "Total files:"
+          (Get-ChildItem "publish" -File).Count
+
+      # =========================================================
+      # 7. Створюємо ZIP
+      # =========================================================
+      - name: Create ZIP
+        shell: pwsh
+        run: |
+          $zip = "CL-Launcher-latest.zip"
+
+          if (Test-Path $zip) {
+              Remove-Item $zip -Force
+          }
+
+          Compress-Archive `
+            -Path "publish\*" `
+            -DestinationPath $zip `
+            -CompressionLevel Optimal
+
+          if (!(Test-Path $zip)) {
+              throw "ZIP file was not created!"
+          }
+
+          $size = (Get-Item $zip).Length / 1MB
+
+          Write-Host ""
+          Write-Host "ZIP created successfully."
+          Write-Host ("ZIP size: {0:N2} MB" -f $size)
+
+      # =========================================================
+      # 8. Завантажуємо ZIP як Artifact
+      # =========================================================
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CL-Launcher-latest
+          path: CL-Launcher-latest.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90

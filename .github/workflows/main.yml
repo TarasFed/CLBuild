@@ -137,40 +137,17 @@ jobs:
           (Get-ChildItem "publish" -File).Count
 
       # =========================================================
-      # 7. Створюємо ZIP
-      # =========================================================
-      - name: Create ZIP
-        shell: pwsh
-        run: |
-          $zip = "CL-Launcher-latest.zip"
-
-          if (Test-Path $zip) {
-              Remove-Item $zip -Force
-          }
-
-          Compress-Archive `
-            -Path "publish\*" `
-            -DestinationPath $zip `
-            -CompressionLevel Optimal
-
-          if (!(Test-Path $zip)) {
-              throw "ZIP file was not created!"
-          }
-
-          $size = (Get-Item $zip).Length / 1MB
-
-          Write-Host ""
-          Write-Host "ZIP created successfully."
-          Write-Host ("ZIP size: {0:N2} MB" -f $size)
-
-      # =========================================================
-      # 8. Завантажуємо ZIP як Artifact
+      # 7. Завантажуємо папку як Артефакт (БЕЗ подвійного ZIP)
       # =========================================================
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: CL-Launcher-latest
-          path: CL-Launcher-latest.zip
+          path: publish/
+          if-no-files-found: error
+          compression-level: 1
+          retention-days: 90
+
           if-no-files-found: error
           compression-level: 0
           retention-days: 90
